@@ -1,16 +1,26 @@
 """
 TrustSeal - QR Code-Based Product Anti-Counterfeit System
 ==========================================================
-Main Flask application entry point.
-Handles routing, authentication, product registration,
-QR code generation, and verification logic.
 
-Author: Final Year Project
+Main Flask application entry point.
+
+Handles:
+- Administrator authentication
+- Product registration
+- QR code generation
+- Product verification
+- Scan logging
+- Counterfeit detection
+- Product management
+- Dashboard statistics
+- SQLite for local development
+- PostgreSQL for Render production deployment
 """
 
 import os
 import uuid
 from datetime import datetime, date
+from functools import wraps
 
 import qrcode
 
@@ -26,49 +36,52 @@ from flask import (
 )
 
 from flask_sqlalchemy import SQLAlchemy
+
 from werkzeug.security import (
     generate_password_hash,
     check_password_hash
 )
 
-from werkzeug.middleware.proxy_fix import ProxyFix
 
-
-# ── App Setup ──────────────────────────────────────────────────────────────────
+# ============================================================
+# APP CONFIGURATION
+# ============================================================
 
 app = Flask(__name__)
 
-# Required when running behind Render's reverse proxy.
-# This allows Flask to correctly recognise HTTPS requests.
-app.wsgi_app = ProxyFix(
-    app.wsgi_app,
-    x_for=1,
-    x_proto=1,
-    x_host=1
-)
+
+# ------------------------------------------------------------
+# Secret key
+#
+# Render will use the SECRET_KEY environment variable.
+# When running locally, the fallback value is used.
+# ------------------------------------------------------------
 
 app.secret_key = os.environ.get(
     "SECRET_KEY",
-    "trustseal-secret-key-change-in-production"
+    "dev-secret-key"
 )
 
 
-# ── Database Configuration ─────────────────────────────────────────────────────
+# ============================================================
+# DATABASE CONFIGURATION
+# ============================================================
 
-# SQLite database.
+# Render provides DATABASE_URL when PostgreSQL is connected.
 #
-# Locally this works with the existing TrustSeal database.
-# Later, for a persistent Render deployment, we can move this
-# to PostgreSQL.
+# Local computer:
+#     SQLite will be used automatically.
+#
+# Render:
+#     PostgreSQL will be used automatically.
 
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+database_url = os.environ.get(
     "DATABASE_URL",
     "sqlite:///trustseal.db"
 )
 
-# Render/PostgreSQL may provide a postgres:// URL.
+# Some hosting providers may provide postgres://.
 # SQLAlchemy expects postgresql://.
-database_url = app.config["SQLALCHEMY_DATABASE_URI"]
 
 if database_url.startswith("postgres://"):
     database_url = database_url.replace(
@@ -77,12 +90,15 @@ if database_url.startswith("postgres://"):
         1
     )
 
+
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 
-# ── QR Code Configuration ──────────────────────────────────────────────────────
+# ============================================================
+# QR CODE STORAGE
+# ============================================================
 
 QR_FOLDER = os.path.join(
     "static",
@@ -95,31 +111,21 @@ os.makedirs(
 )
 
 
-# This allows the same application to work locally and on Render.
-#
-# LOCAL:
-# http://192.168.1.34:5000
-#
-# RENDER:
-# https://your-app-name.onrender.com
-#
-# On Render, we will set PUBLIC_BASE_URL as an environment variable.
-
-PUBLIC_BASE_URL = os.environ.get(
-    "PUBLIC_BASE_URL",
-    "http://192.168.1.34:5000"
-).rstrip("/")
-
-
-# ── Database Object ────────────────────────────────────────────────────────────
+# ============================================================
+# DATABASE
+# ============================================================
 
 db = SQLAlchemy(app)
 
 
-# ── Database Models ────────────────────────────────────────────────────────────
+# ============================================================
+# DATABASE MODELS
+# ============================================================
 
 class Admin(db.Model):
-    """Stores administrator login credentials."""
+    """
+    Stores administrator login credentials.
+    """
 
     __tablename__ = "admins"
 
@@ -147,8 +153,8 @@ class Product(db.Model):
     """
     Stores registered product information.
 
-    Each product receives a globally unique UUID that is embedded
-    inside its QR code.
+    Each product receives a unique UUID which is embedded
+    in its QR verification URL.
     """
 
     __tablename__ = "products"
@@ -198,7 +204,7 @@ class Product(db.Model):
         db.String(300)
     )
 
-    # One product can have many scan events.
+    # One product can have many scan records.
     scans = db.relationship(
         "ScanLog",
         backref="product",
@@ -207,16 +213,18 @@ class Product(db.Model):
 
     def __repr__(self):
         return (
-            f"<Product {self.product_name} "
+            f"<Product "
+            f"{self.product_name} "
             f"[{self.product_id}]>"
         )
 
 
 class ScanLog(db.Model):
     """
-    Records every time a QR code is scanned.
+    Records every product QR verification.
 
-    High scan counts trigger the suspicious-product warning.
+    The number of scans is used as an anti-counterfeit
+    indicator.
     """
 
     __tablename__ = "scan_logs"
@@ -228,7 +236,9 @@ class ScanLog(db.Model):
 
     product_id = db.Column(
         db.String(36),
-        db.ForeignKey("products.product_id"),
+        db.ForeignKey(
+            "products.product_id"
+        ),
         nullable=False
     )
 
@@ -243,25 +253,27 @@ class ScanLog(db.Model):
 
     def __repr__(self):
         return (
-            f"<ScanLog product={self.product_id} "
+            f"<ScanLog "
+            f"product={self.product_id} "
             f"at={self.scanned_at}>"
         )
 
 
-# ── Configuration ──────────────────────────────────────────────────────────────
+# ============================================================
+# APPLICATION SETTINGS
+# ============================================================
 
-# Maximum number of normal scans before a product becomes suspicious.
 SCAN_THRESHOLD = 3
 
 
-# ── Authentication Helper ──────────────────────────────────────────────────────
+# ============================================================
+# LOGIN REQUIRED DECORATOR
+# ============================================================
 
 def login_required(f):
     """
-    Redirects users to the login page if they are not authenticated.
+    Redirects unauthenticated users to the login page.
     """
-
-    from functools import wraps
 
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -282,16 +294,19 @@ def login_required(f):
     return decorated
 
 
-# ── QR Code Generator ──────────────────────────────────────────────────────────
+# ============================================================
+# QR CODE GENERATION
+# ============================================================
 
 def generate_qr_code(
     product_id: str,
     verify_url: str
 ) -> str:
     """
-    Generates a QR code containing the product verification URL.
+    Generates a QR code containing the complete
+    product verification URL.
 
-    Returns the relative path of the generated QR image.
+    Returns the relative path of the saved QR image.
     """
 
     qr = qrcode.QRCode(
@@ -312,7 +327,9 @@ def generate_qr_code(
         back_color="white"
     )
 
-    filename = f"{product_id}.png"
+    filename = (
+        f"{product_id}.png"
+    )
 
     file_path = os.path.join(
         QR_FOLDER,
@@ -324,11 +341,15 @@ def generate_qr_code(
     return file_path
 
 
-# ── Public Routes ──────────────────────────────────────────────────────────────
+# ============================================================
+# PUBLIC ROUTES
+# ============================================================
 
 @app.route("/")
 def home():
-    """Landing page."""
+    """
+    Landing page.
+    """
 
     return render_template(
         "home.html"
@@ -343,7 +364,8 @@ def verify():
     """
     Consumer verification page.
 
-    Accepts a product ID through GET or POST.
+    Allows a user to enter a product ID manually
+    or arrive through the verification interface.
     """
 
     if request.method == "POST":
@@ -352,6 +374,17 @@ def verify():
             "product_id",
             ""
         ).strip()
+
+        if not product_id:
+
+            flash(
+                "Please enter a product ID.",
+                "warning"
+            )
+
+            return redirect(
+                url_for("verify")
+            )
 
         return redirect(
             url_for(
@@ -371,24 +404,34 @@ def verify():
     )
 
 
-@app.route("/result/<product_id>")
+# ============================================================
+# PRODUCT VERIFICATION
+# ============================================================
+
+@app.route(
+    "/result/<product_id>"
+)
 def result(product_id):
     """
-    Verification result page.
+    Verifies a product.
 
-    1. Searches for the product.
-    2. If not found, marks it as counterfeit.
-    3. If found, records the scan.
-    4. Counts the total number of scans.
-    5. Checks the expiry date.
-    6. Determines the verification status.
+    Process:
+    1. Search for the product.
+    2. If it does not exist, report counterfeit/unregistered.
+    3. Record the verification scan.
+    4. Count total scans.
+    5. Check expiry.
+    6. Determine the final status.
     """
 
     product = Product.query.filter_by(
         product_id=product_id
     ).first()
 
-    # Product does not exist.
+    # --------------------------------------------------------
+    # Product not found
+    # --------------------------------------------------------
+
     if not product:
 
         return render_template(
@@ -401,7 +444,10 @@ def result(product_id):
             )
         )
 
-    # Record the scan.
+    # --------------------------------------------------------
+    # Record scan
+    # --------------------------------------------------------
+
     scan = ScanLog(
         product_id=product_id,
         ip_address=request.remote_addr
@@ -411,25 +457,38 @@ def result(product_id):
 
     db.session.commit()
 
-    # Count total scans.
+    # --------------------------------------------------------
+    # Count scans
+    # --------------------------------------------------------
+
     scan_count = ScanLog.query.filter_by(
         product_id=product_id
     ).count()
 
-    # Check expiry.
+    # --------------------------------------------------------
+    # Check expiry
+    # --------------------------------------------------------
+
     today = date.today()
 
-    expired = product.expiry_date < today
+    expired = (
+        product.expiry_date < today
+    )
 
-    # Determine status.
+    # --------------------------------------------------------
+    # Determine status
+    # --------------------------------------------------------
+
     if scan_count > SCAN_THRESHOLD:
 
         status = "suspicious"
 
         message = (
-            f"This QR code has been scanned {scan_count} times. "
-            "Unusually high scan activity may indicate that the "
-            "QR code has been duplicated. Treat with caution."
+            f"This QR code has been scanned "
+            f"{scan_count} times. "
+            "Unusually high scan activity may indicate "
+            "that the QR code has been duplicated. "
+            "Treat with caution."
         )
 
     elif expired:
@@ -457,14 +516,18 @@ def result(product_id):
     )
 
 
-# ── Admin Authentication ───────────────────────────────────────────────────────
+# ============================================================
+# ADMIN LOGIN
+# ============================================================
 
 @app.route(
     "/login",
     methods=["GET", "POST"]
 )
 def login():
-    """Admin login page."""
+    """
+    Administrator login page.
+    """
 
     if "admin_id" in session:
 
@@ -488,17 +551,24 @@ def login():
             username=username
         ).first()
 
-        if admin and check_password_hash(
-            admin.password,
-            password
+        if (
+            admin
+            and check_password_hash(
+                admin.password,
+                password
+            )
         ):
 
             session["admin_id"] = admin.id
 
-            session["admin_name"] = admin.username
+            session["admin_name"] = (
+                admin.username
+            )
 
             flash(
-                "Welcome back, " + admin.username + "!",
+                "Welcome back, "
+                + admin.username
+                + "!",
                 "success"
             )
 
@@ -506,21 +576,25 @@ def login():
                 url_for("dashboard")
             )
 
-        else:
-
-            flash(
-                "Invalid username or password.",
-                "danger"
-            )
+        flash(
+            "Invalid username or password.",
+            "danger"
+        )
 
     return render_template(
         "login.html"
     )
 
 
+# ============================================================
+# LOGOUT
+# ============================================================
+
 @app.route("/logout")
 def logout():
-    """Logs the administrator out."""
+    """
+    Logs the administrator out.
+    """
 
     session.clear()
 
@@ -534,31 +608,41 @@ def logout():
     )
 
 
-# ── Admin Dashboard ────────────────────────────────────────────────────────────
+# ============================================================
+# ADMIN DASHBOARD
+# ============================================================
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
     """
-    Admin overview showing all registered products.
+    Displays all registered products.
 
-    The scan count is calculated for every product
-    before the dashboard template is rendered.
+    The scan count is calculated for EVERY product
+    before the template is rendered.
     """
 
     products = Product.query.order_by(
         Product.registered_at.desc()
     ).all()
 
-    # Attach scan count to EVERY product.
-    for p in products:
+    # --------------------------------------------------------
+    # Calculate scan count for every product
+    # --------------------------------------------------------
 
-        p.scan_count = ScanLog.query.filter_by(
-            product_id=p.product_id
-        ).count()
+    for product in products:
+
+        product.scan_count = (
+            ScanLog.query
+            .filter_by(
+                product_id=product.product_id
+            )
+            .count()
+        )
 
     # IMPORTANT:
-    # This return statement is outside the loop.
+    # render_template MUST be outside the loop.
+
     return render_template(
         "dashboard.html",
         products=products,
@@ -566,7 +650,9 @@ def dashboard():
     )
 
 
-# ── Product Registration ───────────────────────────────────────────────────────
+# ============================================================
+# PRODUCT REGISTRATION
+# ============================================================
 
 @app.route(
     "/register",
@@ -575,9 +661,7 @@ def dashboard():
 @login_required
 def register_product():
     """
-    Product registration form.
-
-    Creates a unique product ID and QR code.
+    Registers a new product and generates its QR code.
     """
 
     if request.method == "POST":
@@ -607,7 +691,10 @@ def register_product():
             ""
         )
 
-        # Validate required fields.
+        # ----------------------------------------------------
+        # Required-field validation
+        # ----------------------------------------------------
+
         if not all([
             product_name,
             batch_number,
@@ -622,10 +709,15 @@ def register_product():
             )
 
             return redirect(
-                url_for("register_product")
+                url_for(
+                    "register_product"
+                )
             )
 
-        # Convert dates.
+        # ----------------------------------------------------
+        # Convert dates
+        # ----------------------------------------------------
+
         try:
 
             prod_date = datetime.strptime(
@@ -646,10 +738,15 @@ def register_product():
             )
 
             return redirect(
-                url_for("register_product")
+                url_for(
+                    "register_product"
+                )
             )
 
-        # Validate date order.
+        # ----------------------------------------------------
+        # Validate date order
+        # ----------------------------------------------------
+
         if exp_date <= prod_date:
 
             flash(
@@ -658,38 +755,56 @@ def register_product():
             )
 
             return redirect(
-                url_for("register_product")
+                url_for(
+                    "register_product"
+                )
             )
 
-        # Generate UUID.
+        # ----------------------------------------------------
+        # Generate unique product UUID
+        # ----------------------------------------------------
+
         product_id = str(
             uuid.uuid4()
         )
 
-        # ─────────────────────────────────────────────────────────
-        # QR CODE URL
+        # ----------------------------------------------------
+        # Generate verification URL
         #
-        # LOCAL:
-        # http://192.168.1.34:5000/result/PRODUCT-ID
+        # IMPORTANT:
         #
-        # RENDER:
-        # https://your-app.onrender.com/result/PRODUCT-ID
+        # Instead of hard-coding:
         #
-        # The Render value will be supplied through the
-        # PUBLIC_BASE_URL environment variable.
-        # ─────────────────────────────────────────────────────────
+        # 192.168.1.34:5000
+        #
+        # Flask automatically uses the current host.
+        #
+        # Local:
+        # http://192.168.1.34:5000/result/...
+        #
+        # Render:
+        # https://your-app.onrender.com/result/...
+        # ----------------------------------------------------
 
-        verify_url = (
-            f"{PUBLIC_BASE_URL}/result/{product_id}"
+        verify_url = url_for(
+            "result",
+            product_id=product_id,
+            _external=True
         )
 
-        # Generate QR code.
+        # ----------------------------------------------------
+        # Generate QR code
+        # ----------------------------------------------------
+
         qr_path = generate_qr_code(
             product_id,
             verify_url
         )
 
-        # Create product.
+        # ----------------------------------------------------
+        # Create product record
+        # ----------------------------------------------------
+
         product = Product(
             product_id=product_id,
             product_name=product_name,
@@ -705,7 +820,8 @@ def register_product():
         db.session.commit()
 
         flash(
-            f'Product "{product_name}" registered successfully!',
+            f'Product "{product_name}" '
+            "registered successfully!",
             "success"
         )
 
@@ -721,12 +837,18 @@ def register_product():
     )
 
 
-# ── QR Code Routes ─────────────────────────────────────────────────────────────
+# ============================================================
+# VIEW QR CODE
+# ============================================================
 
-@app.route("/qr/<product_id>")
+@app.route(
+    "/qr/<product_id>"
+)
 @login_required
 def view_qr(product_id):
-    """Displays the generated QR code."""
+    """
+    Displays the generated QR code.
+    """
 
     product = Product.query.filter_by(
         product_id=product_id
@@ -738,10 +860,18 @@ def view_qr(product_id):
     )
 
 
-@app.route("/qr/download/<product_id>")
+# ============================================================
+# DOWNLOAD QR CODE
+# ============================================================
+
+@app.route(
+    "/qr/download/<product_id>"
+)
 @login_required
 def download_qr(product_id):
-    """Downloads the QR code PNG file."""
+    """
+    Downloads the QR code PNG file.
+    """
 
     product = Product.query.filter_by(
         product_id=product_id
@@ -756,7 +886,9 @@ def download_qr(product_id):
     )
 
 
-# ── Delete Product ─────────────────────────────────────────────────────────────
+# ============================================================
+# DELETE PRODUCT
+# ============================================================
 
 @app.route(
     "/delete/<product_id>",
@@ -764,18 +896,22 @@ def download_qr(product_id):
 )
 @login_required
 def delete_product(product_id):
-    """Deletes a product and its scan logs."""
+    """
+    Deletes a product and its associated scan logs.
+    """
 
     product = Product.query.filter_by(
         product_id=product_id
     ).first_or_404()
 
-    # Delete associated scan logs.
+    # Delete scan records first.
+
     ScanLog.query.filter_by(
         product_id=product_id
     ).delete()
 
     # Delete product.
+
     db.session.delete(product)
 
     db.session.commit()
@@ -790,17 +926,21 @@ def delete_product(product_id):
     )
 
 
-# ── Database Initialisation ────────────────────────────────────────────────────
+# ============================================================
+# DEFAULT ADMIN ACCOUNT
+# ============================================================
 
 def seed_admin():
     """
-    Creates a default administrator account
-    on the first application run.
+    Creates the default administrator account
+    if one does not already exist.
     """
 
-    if not Admin.query.filter_by(
+    existing_admin = Admin.query.filter_by(
         username="admin"
-    ).first():
+    ).first()
+
+    if not existing_admin:
 
         default_admin = Admin(
             username="admin",
@@ -817,11 +957,14 @@ def seed_admin():
 
         print(
             "Default admin created -> "
-            "username: admin | password: admin123"
+            "username: admin | "
+            "password: admin123"
         )
 
 
-# ── Create Database ────────────────────────────────────────────────────────────
+# ============================================================
+# DATABASE INITIALISATION
+# ============================================================
 
 with app.app_context():
 
@@ -830,12 +973,21 @@ with app.app_context():
     seed_admin()
 
 
-# ── Application Entry Point ────────────────────────────────────────────────────
+# ============================================================
+# APPLICATION ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
 
     app.run(
         debug=True,
         host="0.0.0.0",
-        port=5000
+        port=port
     )
