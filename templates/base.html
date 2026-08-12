@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}TrustSeal{% endblock %} — Anti-Counterfeit System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <!-- Favicon emoji fallback -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔒</text></svg>"/>
+</head>
+<body>
+
+  <!-- ── Navigation ────────────────────────────────────────── -->
+  <nav class="navbar">
+    <a href="{{ url_for('home') }}" class="navbar-brand">
+      <div class="brand-icon">🔐</div>
+      TrustSeal
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="{{ url_for('home') }}">Home</a></li>
+      <li><a href="{{ url_for('verify') }}">Verify Product</a></li>
+
+      {% if session.admin_id %}
+        <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+        <li><a href="{{ url_for('register_product') }}">Register Product</a></li>
+        <li><a href="{{ url_for('logout') }}">Logout</a></li>
+      {% else %}
+        <li><a href="{{ url_for('login') }}" class="nav-cta">Admin Login</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+
+  <!-- ── Flash Messages ────────────────────────────────────── -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="main-content" style="padding-bottom:0">
+        <div class="container flash-messages">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+              {% if category == 'success' %}✅{% elif category == 'danger' %}❌{% elif category == 'warning' %}⚠️{% else %}ℹ️{% endif %}
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- ── Page Content ───────────────────────────────────────── -->
+  {% block content %}{% endblock %}
+
+  <!-- ── Footer ────────────────────────────────────────────── -->
+  <footer>
+    &copy; {{ 2025 }} <span>TrustSeal</span> — QR Code Anti-Counterfeit System &nbsp;|&nbsp; Final Year Project
+  </footer>
+
+</body>
+</html>

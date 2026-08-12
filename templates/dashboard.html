@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="main-content">
+  <div class="container">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <div>
+        <h1>📊 Admin Dashboard</h1>
+        <p>Welcome back, <strong>{{ session.admin_name }}</strong> — manage registered products below.</p>
+      </div>
+      <a href="{{ url_for('register_product') }}" class="btn btn-primary">
+        ➕ &nbsp; Register New Product
+      </a>
+    </div>
+
+    <!-- Stats Row -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:2rem;">
+
+      <div class="card" style="padding:1.2rem;text-align:center;border-top:4px solid var(--teal);">
+        <div style="font-size:1.8rem;font-weight:700;color:var(--ink);">{{ products|length }}</div>
+        <div style="font-size:.8rem;color:var(--grey);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Total Products</div>
+      </div>
+
+      <div class="card" style="padding:1.2rem;text-align:center;border-top:4px solid var(--success);">
+        <div style="font-size:1.8rem;font-weight:700;color:var(--ink);">
+          {{ products|selectattr('scan_count', 'le', 3)|list|length }}
+        </div>
+        <div style="font-size:.8rem;color:var(--grey);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Genuine Scans</div>
+      </div>
+
+      <div class="card" style="padding:1.2rem;text-align:center;border-top:4px solid var(--danger);">
+        <div style="font-size:1.8rem;font-weight:700;color:var(--ink);">
+          {{ products|selectattr('scan_count', 'gt', 3)|list|length }}
+        </div>
+        <div style="font-size:.8rem;color:var(--grey);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Suspicious</div>
+      </div>
+
+    </div>
+
+    <!-- Products Table -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Registered Products</h2>
+        <p>{{ products|length }} product(s) in the database</p>
+      </div>
+
+      {% if products %}
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Product Name</th>
+              <th>Batch No.</th>
+              <th>Manufacturer</th>
+              <th>Expiry</th>
+              <th>Scans</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for product in products %}
+            <tr>
+              <td style="color:var(--grey);font-size:.8rem;">{{ loop.index }}</td>
+              <td><strong>{{ product.product_name }}</strong></td>
+              <td>{{ product.batch_number }}</td>
+              <td>{{ product.manufacturer_name }}</td>
+              <td>{{ product.expiry_date.strftime('%d %b %Y') }}</td>
+              <td>
+                <span class="badge {% if product.scan_count > 3 %}badge-danger{% elif product.scan_count > 0 %}badge-info{% else %}badge-success{% endif %}">
+                  {{ product.scan_count }}
+                </span>
+              </td>
+              <td>
+                {% if product.scan_count > 3 %}
+                  <span class="badge badge-danger">⚠️ Suspicious</span>
+                {% elif product.expiry_date < today %}
+                  <span class="badge badge-warn">Expired</span>
+                {% else %}
+                  <span class="badge badge-success">✅ Active</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{{ url_for('view_qr', product_id=product.product_id) }}"
+                     class="btn btn-sm btn-secondary" title="View QR">
+                    📲 QR
+                  </a>
+                  <form method="POST"
+                        action="{{ url_for('delete_product', product_id=product.product_id) }}"
+                        style="display:inline;"
+                        onsubmit="return confirm('Delete this product? This cannot be undone.');">
+                    <button type="submit" class="btn btn-sm btn-danger" title="Delete">🗑️</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% else %}
+      <div class="empty-state">
+        <span class="empty-icon">📭</span>
+        <h3>No Products Registered Yet</h3>
+        <p>Start by registering your first product.</p>
+        <a href="{{ url_for('register_product') }}" class="btn btn-primary mt-2">
+          ➕ Register Product
+        </a>
+      </div>
+      {% endif %}
+
+    </div><!-- /.card -->
+
+  </div>
+</div>
+
+<script>
+  // Pass today's date to Jinja (simple JS injection for expiry check)
+</script>
+{% endblock %}

@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Register Product{% endblock %}
+
+{% block content %}
+<div class="main-content">
+  <div class="container">
+
+    <div class="page-header">
+      <div>
+        <h1>📦 Register New Product</h1>
+        <p>Fill in the product details below. A QR code will be generated automatically.</p>
+      </div>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline">← Dashboard</a>
+    </div>
+
+    <div style="max-width:680px;margin:0 auto;">
+      <div class="card">
+        <div class="card-header">
+          <h2>Product Information</h2>
+          <p>All fields are required</p>
+        </div>
+        <div class="card-body">
+
+          <form method="POST" action="{{ url_for('register_product') }}">
+
+            <!-- Product Name -->
+            <div class="form-group">
+              <label for="product_name">Product Name</label>
+              <input
+                type="text"
+                id="product_name"
+                name="product_name"
+                class="form-control"
+                placeholder="e.g. Paracetamol 500mg Tablets"
+                required
+              />
+            </div>
+
+            <!-- Batch Number & Manufacturer -->
+            <div class="form-row">
+              <div class="form-group">
+                <label for="batch_number">Batch Number</label>
+                <input
+                  type="text"
+                  id="batch_number"
+                  name="batch_number"
+                  class="form-control"
+                  placeholder="e.g. BATCH-2025-001"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label for="manufacturer_name">Manufacturer Name</label>
+                <input
+                  type="text"
+                  id="manufacturer_name"
+                  name="manufacturer_name"
+                  class="form-control"
+                  placeholder="e.g. PharmaCorp Ltd."
+                  required
+                />
+              </div>
+            </div>
+
+            <!-- Dates -->
+            <div class="form-row">
+              <div class="form-group">
+                <label for="production_date">Production Date</label>
+                <input
+                  type="date"
+                  id="production_date"
+                  name="production_date"
+                  class="form-control"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label for="expiry_date">Expiry Date</label>
+                <input
+                  type="date"
+                  id="expiry_date"
+                  name="expiry_date"
+                  class="form-control"
+                  required
+                />
+              </div>
+            </div>
+
+            <hr class="divider"/>
+
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+              <button type="submit" class="btn btn-primary btn-lg">
+                🔐 &nbsp; Register &amp; Generate QR Code
+              </button>
+              <a href="{{ url_for('dashboard') }}" class="btn btn-outline">
+                Cancel
+              </a>
+            </div>
+
+          </form>
+        </div><!-- /.card-body -->
+      </div><!-- /.card -->
+
+      <!-- Info Note -->
+      <div style="margin-top:1.2rem;padding:1rem 1.2rem;background:var(--teal-lt);border-radius:10px;border-left:4px solid var(--teal);">
+        <strong>ℹ️ What happens next?</strong>
+        <p style="font-size:.87rem;margin-top:.3rem;color:var(--ink);">
+          After submission, a unique UUID product ID is generated and a QR code image is
+          created that encodes your product's verification URL. You can then download the
+          PNG and print it on product packaging.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // Auto-set production date to today
+  document.getElementById('production_date').valueAsDate = new Date();
+
+  // Validate expiry > production before submit
+  document.querySelector('form').addEventListener('submit', function(e) {
+    const prod = document.getElementById('production_date').value;
+    const exp  = document.getElementById('expiry_date').value;
+    if (prod && exp && exp <= prod) {
+      e.preventDefault();
+      alert('Expiry date must be after the production date.');
+    }
+  });
+</script>
+{% endblock %}

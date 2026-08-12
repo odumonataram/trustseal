@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Verification Result{% endblock %}
+
+{% block content %}
+<div class="main-content">
+  <div class="container">
+
+    <div class="page-header" style="justify-content:center;text-align:center;flex-direction:column;align-items:center;">
+      <h1>Verification Result</h1>
+      <p class="text-muted mt-1">Real-time product authenticity check</p>
+    </div>
+
+    <div class="verify-box">
+
+      <!-- Result Banner -->
+      {% if status == 'genuine' %}
+      <div class="result-banner genuine">
+        <span class="result-icon">✅</span>
+        <h2 style="color:#155724;">Genuine Product</h2>
+        <p>{{ message }}</p>
+      </div>
+
+      {% elif status == 'expired' %}
+      <div class="result-banner expired">
+        <span class="result-icon">⏰</span>
+        <h2 style="color:#856404;">Product Expired</h2>
+        <p>{{ message }}</p>
+      </div>
+
+      {% elif status == 'suspicious' %}
+      <div class="result-banner suspicious">
+        <span class="result-icon">⚠️</span>
+        <h2 style="color:#721c24;">Warning: Suspicious Activity</h2>
+        <p>{{ message }}</p>
+      </div>
+
+      {% else %}
+      <!-- counterfeit / not found -->
+      <div class="result-banner counterfeit">
+        <span class="result-icon">🚫</span>
+        <h2 style="color:#721c24;">Warning: Possible Counterfeit</h2>
+        <p>{{ message }}</p>
+      </div>
+      {% endif %}
+
+      <!-- Product Details (only if found in DB) -->
+      {% if product %}
+      <div class="card mt-3">
+        <div class="card-header" style="background:var(--ink-lt);">
+          <h2 style="font-size:1.1rem;">📦 Product Information</h2>
+          <p>Details retrieved from the database</p>
+        </div>
+        <div class="card-body">
+
+          <div class="detail-grid">
+
+            <div class="detail-item">
+              <label>Product Name</label>
+              <span>{{ product.product_name }}</span>
+            </div>
+
+            <div class="detail-item">
+              <label>Manufacturer</label>
+              <span>{{ product.manufacturer_name }}</span>
+            </div>
+
+            <div class="detail-item">
+              <label>Batch Number</label>
+              <span>{{ product.batch_number }}</span>
+            </div>
+
+            <div class="detail-item">
+              <label>Production Date</label>
+              <span>{{ product.production_date.strftime('%d %B %Y') }}</span>
+            </div>
+
+            <div class="detail-item">
+              <label>Expiry Date</label>
+              <span>{{ product.expiry_date.strftime('%d %B %Y') }}</span>
+            </div>
+
+            <div class="detail-item">
+              <label>Times Scanned</label>
+              <span>
+                {{ scan_count }}
+                {% if scan_count > 3 %}
+                  <span class="badge badge-danger" style="margin-left:.3rem;">High</span>
+                {% endif %}
+              </span>
+            </div>
+
+          </div>
+
+          <hr class="divider"/>
+
+          <!-- Authentication Status Summary -->
+          <div style="display:flex;align-items:center;gap:.8rem;padding:.85rem 1rem;border-radius:8px;
+            {% if status == 'genuine' %}background:#d4edda;{% elif status == 'expired' %}background:#fff3cd;{% else %}background:#f8d7da;{% endif %}">
+            <span style="font-size:1.4rem;">
+              {% if status == 'genuine' %}✅{% elif status == 'expired' %}⏰{% else %}⚠️{% endif %}
+            </span>
+            <div>
+              <strong style="font-size:.9rem;">Authentication Status</strong>
+              <p style="font-size:.85rem;margin:0;">
+                {% if status == 'genuine' %}
+                  This product is <strong>verified genuine</strong> in our database.
+                {% elif status == 'expired' %}
+                  This product is registered but has <strong>passed its expiry date</strong>.
+                {% elif status == 'suspicious' %}
+                  This QR code has been scanned an <strong>unusually high number of times</strong>.
+                  The physical QR code may have been duplicated. Do not consume if in doubt.
+                {% endif %}
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /.card -->
+      {% endif %}
+
+      <!-- Actions -->
+      <div style="display:flex;gap:1rem;justify-content:center;margin-top:1.5rem;flex-wrap:wrap;">
+        <a href="{{ url_for('verify') }}" class="btn btn-outline">
+          ← Verify Another Product
+        </a>
+        <a href="{{ url_for('home') }}" class="btn btn-secondary">
+          🏠 Home
+        </a>
+      </div>
+
+      <!-- Report note -->
+      {% if status in ['suspicious', 'counterfeit'] %}
+      <div style="margin-top:1.2rem;padding:1rem;background:#f8d7da;border-radius:8px;text-align:center;font-size:.85rem;">
+        ⚠️ If you believe this product is counterfeit, <strong>do not use it</strong> and
+        report it to the manufacturer or relevant authorities immediately.
+      </div>
+      {% endif %}
+
+    </div><!-- /.verify-box -->
+  </div>
+</div>
+{% endblock %}

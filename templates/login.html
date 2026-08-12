@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Admin Login{% endblock %}
+
+{% block content %}
+<div class="login-wrapper">
+  <div class="login-card">
+
+    <div class="card-header">
+      <div class="login-logo">🔐</div>
+      <h2 style="font-size:1.4rem;">Admin Login</h2>
+      <p style="color:rgba(255,255,255,.6);font-size:.85rem;margin-top:.3rem;">
+        Manufacturer &amp; Admin Portal
+      </p>
+    </div>
+
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('login') }}">
+
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            class="form-control"
+            placeholder="Enter your username"
+            required
+            autofocus
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="form-control"
+            placeholder="Enter your password"
+            required
+          />
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full mt-2">
+          🔑 &nbsp; Login
+        </button>
+
+      </form>
+
+      <hr class="divider"/>
+
+      <p class="text-center text-muted" style="font-size:.82rem;">
+        Default credentials: <strong>admin</strong> / <strong>admin123</strong><br/>
+        <em>Change these before deployment.</em>
+      </p>
+
+      <div class="text-center mt-2">
+        <a href="{{ url_for('home') }}" style="font-size:.85rem;">← Back to Home</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
